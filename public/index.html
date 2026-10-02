@@ -3,59 +3,72 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#f5f5ed" />
+    <meta name="theme-color" content="#0b1d18" />
     <meta name="description" content="Follow the Mursix Walktober team and individual step challenge." />
     <title>Walktober — Mursix walking challenge</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:opsz,wght@9..40,400..700&family=Fraunces:ital,opsz,wght@0,9..144,400..700;1,9..144,400..700&display=swap" />
     <link rel="stylesheet" href="/styles.css" />
     <script src="/app.js" type="module"></script>
+    <script src="/scene.js" type="module"></script>
   </head>
   <body>
-    <header class="site-header">
-      <a class="brand" href="#top" aria-label="Walktober home">
-        <span class="brand-mark" aria-hidden="true">
-          <svg viewBox="0 0 40 40" fill="none"><path d="M9 29.5 18.2 20l5.2 5.1L31 17" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="10" cy="13" r="2.5" fill="currentColor"/><circle cx="17" cy="9" r="2" fill="currentColor"/><circle cx="28" cy="31" r="2" fill="currentColor"/></svg>
-        </span>
-        <span class="brand-type"><strong>walktober</strong><small>by Mursix</small></span>
-      </a>
-      <nav class="main-nav" aria-label="Main navigation">
-        <a href="#standings">Standings</a>
-        <a href="#people">Walkers</a>
-        <a href="#how-it-works">How it works</a>
-      </nav>
-      <button class="button button-dark header-action" id="account-button" type="button">Sign in <span aria-hidden="true">↗</span></button>
+    <canvas class="fx-canvas" id="fx-canvas" aria-hidden="true"></canvas>
+
+    <header class="site-header" id="site-header">
+      <div class="header-inner">
+        <a class="brand" href="#top" aria-label="Walktober home">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 40 40" fill="none"><path d="M9 29.5 18.2 20l5.2 5.1L31 17" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="10" cy="13" r="2.5" fill="currentColor"/><circle cx="17" cy="9" r="2" fill="currentColor"/><circle cx="28" cy="31" r="2" fill="currentColor"/></svg>
+          </span>
+          <span class="brand-type"><strong>walktober</strong><small>by Mursix</small></span>
+        </a>
+        <nav class="main-nav" aria-label="Main navigation">
+          <a href="#standings">Standings</a>
+          <a href="#people">Walkers</a>
+          <a href="#how-it-works">How it works</a>
+        </nav>
+        <button class="button button-lime header-action" id="account-button" type="button">Sign in <span aria-hidden="true">↗</span></button>
+      </div>
     </header>
 
     <main id="top">
-      <section class="hero page-shell" aria-labelledby="hero-title">
-        <div class="hero-copy">
-          <p class="eyebrow"><span class="eyebrow-dot"></span> MURSIX WALKING CHALLENGE <span class="eyebrow-separator">/</span> OCTOBER 2026</p>
-          <h1 id="hero-title">A month of steps<br /><span>adds up.</span></h1>
-          <p class="hero-description">Every walk moves your team forward. Log your daily steps, cheer on your crew, and see where we land together.</p>
-          <div class="hero-actions">
-            <button class="button button-lime" id="hero-log-button" type="button">Log your steps <span aria-hidden="true">↗</span></button>
+      <section class="hero" data-scene="top" aria-labelledby="hero-title">
+        <div class="scene scene-back" aria-hidden="true">
+          <div class="sky"></div>
+          <img class="layer stars" data-parallax=".82" src="/assets/stars.svg" alt="" />
+          <div class="sun-wrap" data-parallax=".68" data-drift="5"><div class="sun-rays"></div><div class="sun-bloom"></div><div class="sun"></div></div>
+          <div class="layer-drift" data-parallax=".66" data-drift="7"><img class="layer clouds" src="/assets/clouds.svg" alt="" /></div>
+          <svg class="birds" data-parallax=".6" data-drift="12" viewBox="0 0 200 80" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 30q9-10 16 0q8-9 16 1"/><path d="M58 14q7-8 13 0q6-7 13 1"/><path d="M92 42q6-7 11 0q6-6 11 1"/><path d="M134 22q5-6 9 0q5-5 9 1"/><path d="M160 50q4-5 8 0q4-4 8 1"/></svg>
+          <img class="layer ridge" data-parallax=".58" data-drift="6" src="/assets/dawn-1.svg" alt="" />
+          <img class="layer ridge" data-parallax=".5" data-drift="10" src="/assets/dawn-2.svg" alt="" />
+          <img class="layer ridge" data-parallax=".42" data-drift="15" src="/assets/dawn-3.svg" alt="" />
+        </div>
+
+        <div class="hero-copy page-shell" data-parallax=".36" data-fade="1">
+          <p class="eyebrow rise" style="--i:0"><span class="eyebrow-dot"></span> MURSIX WALKING CHALLENGE <span class="eyebrow-separator">/</span> OCTOBER 2026</p>
+          <h1 id="hero-title"><span class="line"><span class="rise" style="--i:1">A month of steps</span></span><span class="line"><em class="rise" style="--i:2">adds up.</em></span></h1>
+          <p class="hero-description rise" style="--i:3">Every walk moves your team forward. Log your daily steps, cheer on your crew, and see where we land together.</p>
+          <div class="hero-actions rise" style="--i:4">
+            <button class="button button-lime button-large" id="hero-log-button" type="button">Log your steps <span aria-hidden="true">↗</span></button>
             <a class="text-link" href="#standings">See the standings <span aria-hidden="true">↓</span></a>
           </div>
-          <div class="hero-note"><span class="note-check" aria-hidden="true">✓</span><span>One roster. Four teams. Every step counts.</span></div>
+          <div class="hero-note rise" style="--i:5"><span class="note-check" aria-hidden="true">✓</span><span>One roster. Four teams. Every step counts.</span></div>
         </div>
-        <div class="hero-art" aria-label="Walktober October challenge illustration">
-          <div class="art-sun"></div>
-          <div class="art-ring art-ring-one"></div><div class="art-ring art-ring-two"></div>
-          <div class="art-label"><span>31</span><small>days<br />in motion</small></div>
-          <svg class="art-trail" viewBox="0 0 430 250" fill="none" aria-hidden="true">
-            <path d="M3 201c47-39 63 19 107-14 29-22 32-84 75-83 43 1 33 49 70 52 37 3 48-46 83-39 23 5 26 36 56 19" stroke="#839476" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="2 9"/>
-            <path d="M58 94c5-9 18-7 19 3l2 11c1 6-7 10-12 6-7-5-13-12-9-20ZM82 119c6-8 18-5 18 4l1 11c0 6-8 9-13 4-6-6-10-14-6-19Z" fill="#f5f5ed" stroke="#174435" stroke-width="2"/>
-            <path d="M281 68c5-9 18-7 19 3l2 11c1 6-7 10-12 6-7-5-13-12-9-20ZM305 93c6-8 18-5 18 4l1 11c0 6-8 9-13 4-6-6-10-14-6-19Z" fill="#f5f5ed" stroke="#174435" stroke-width="2"/>
-            <circle cx="200" cy="104" r="7" fill="#cced68"/><circle cx="330" cy="117" r="5" fill="#cced68"/>
-          </svg>
-          <div class="art-caption"><span class="caption-line"></span><span>SHOW UP FOR<br />YOURSELF + YOUR TEAM</span></div>
-          <div class="art-plant plant-left" aria-hidden="true"><i></i><i></i><i></i></div>
-          <div class="art-plant plant-right" aria-hidden="true"><i></i><i></i><i></i></div>
-          <div class="art-number" aria-hidden="true">26</div>
+
+        <div class="scene scene-front" aria-hidden="true">
+          <img class="layer ridge" data-parallax=".33" data-drift="22" src="/assets/dawn-4.svg" alt="" />
+          <div class="mist" data-parallax=".28" data-drift="26"></div>
+          <img class="layer ridge" data-parallax=".23" data-drift="32" src="/assets/dawn-5.svg" alt="" />
+          <img class="layer ridge" data-parallax=".12" data-drift="46" src="/assets/dawn-6.svg" alt="" />
+          <img class="layer ridge layer-front" data-parallax="0" data-drift="52" src="/assets/dawn-7.svg" alt="" />
         </div>
+        <div class="grain" aria-hidden="true"></div>
       </section>
 
-      <section class="summary-strip page-shell" aria-label="Challenge snapshot">
+      <section class="summary-strip page-shell reveal" id="snapshot" aria-label="Challenge snapshot">
         <div class="summary-intro"><span class="live-indicator"></span><span>THE CHALLENGE SO FAR</span><small id="updated-at">Connecting…</small></div>
         <div class="summary-metric"><strong id="total-steps">—</strong><span>steps logged</span></div>
         <div class="summary-metric"><strong id="active-walkers">—</strong><span>walkers moving</span></div>
@@ -64,24 +77,42 @@
       </section>
 
       <section class="dashboard page-shell" id="standings" aria-labelledby="standings-title">
-        <div class="section-heading">
-          <div><p class="eyebrow">THE FRIENDLY COMPETITION</p><h2 id="standings-title">How the teams stack up<span class="heading-period">.</span></h2></div>
+        <div class="ghost-word" data-parallax="-.12" aria-hidden="true">TEAMS</div>
+        <div class="section-heading reveal">
+          <div><p class="eyebrow">THE FRIENDLY COMPETITION</p><h2 id="standings-title">How the teams <em>stack up</em><span class="heading-period">.</span></h2></div>
           <p class="section-aside">Every step rolls up to your crew.<br />Keep it moving, Mursix.</p>
         </div>
+
+        <section class="card climb reveal" aria-labelledby="climb-title">
+          <div class="card-topline"><div><span class="card-index">THE CLIMB</span><h3 id="climb-title">Race to the ridge</h3></div><span class="card-caption">EACH TEAM’S SHARE OF THE LEADER’S STEPS</span></div>
+          <div class="climb-stage">
+            <svg class="climb-art" viewBox="0 0 1000 300" preserveAspectRatio="none" aria-hidden="true">
+              <defs>
+                <linearGradient id="climb-far" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d8f17b" stop-opacity=".1"/><stop offset="1" stop-color="#d8f17b" stop-opacity="0"/></linearGradient>
+                <linearGradient id="climb-near" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d8f17b" stop-opacity=".2"/><stop offset="1" stop-color="#d8f17b" stop-opacity="0"/></linearGradient>
+              </defs>
+              <path fill="url(#climb-far)" d="M0 300V196l70-36 54 26 96-84 70 58 88-112 92 86 74-52 96 70 82-98 86 60 112-74v270Z"/>
+              <path fill="url(#climb-near)" d="M0 300V262C140 258 210 226 330 208S520 190 620 150 800 84 960 44l40-10v266Z"/>
+              <path id="climb-trail" class="climb-trail" vector-effect="non-scaling-stroke" d="M24 260C150 256 214 224 330 207S520 189 620 149 800 83 962 42"/>
+            </svg>
+            <div class="climb-markers" id="climb-markers" aria-live="polite"></div>
+          </div>
+        </section>
+
         <div class="dashboard-grid">
-          <section class="card team-card" aria-labelledby="teams-title">
+          <section class="card team-card reveal" aria-labelledby="teams-title">
             <div class="card-topline"><div><span class="card-index">01</span><h3 id="teams-title">Team standings</h3></div><span class="card-caption">TOTAL STEPS</span></div>
             <div class="team-list" id="team-list" aria-live="polite"><div class="loading-line">Loading team standings…</div></div>
             <div class="team-card-foot"><span class="team-foot-dot"></span><span>Team totals update as steps come in.</span></div>
           </section>
 
-          <section class="card log-card" id="log-card" aria-labelledby="log-title">
+          <section class="card log-card reveal" id="log-card" aria-labelledby="log-title">
             <div class="card-topline"><div><span class="card-index">02</span><h3 id="log-title">Your daily steps</h3></div><span class="log-icon" aria-hidden="true">↗</span></div>
             <div id="signed-out-log" class="signed-out-log">
-              <div class="log-illustration" aria-hidden="true"><span class="log-sun"></span><svg viewBox="0 0 108 68" fill="none"><path d="M4 53c17-20 25 6 39-10 14-16 13-39 29-35 14 4 7 24 19 29 6 2 10-1 15-5" stroke="#174435" stroke-width="2" stroke-linecap="round" stroke-dasharray="1 7"/><path d="M41 17c4-7 13-5 14 3l1 7c0 4-5 7-9 4-5-3-9-9-6-14Zm13 17c4-6 12-3 12 3v7c0 4-6 6-9 3-4-4-7-9-3-13Z" fill="#fffdf8" stroke="#174435" stroke-width="1.6"/></svg></div>
+              <div class="log-illustration" aria-hidden="true"><span class="log-sun"></span><svg viewBox="0 0 108 68" fill="none"><path d="M4 53c17-20 25 6 39-10 14-16 13-39 29-35 14 4 7 24 19 29 6 2 10-1 15-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="1 7"/><path d="M41 17c4-7 13-5 14 3l1 7c0 4-5 7-9 4-5-3-9-9-6-14Zm13 17c4-6 12-3 12 3v7c0 4-6 6-9 3-4-4-7-9-3-13Z" fill="#10261f" stroke="currentColor" stroke-width="1.6"/></svg></div>
               <h4>Your steps, your team.</h4>
               <p>Claim your name once, then drop in your daily step count whenever you take a walk.</p>
-              <button class="button button-dark button-full" id="claim-button" type="button">Claim your name <span aria-hidden="true">↗</span></button>
+              <button class="button button-lime button-full" id="claim-button" type="button">Claim your name <span aria-hidden="true">↗</span></button>
               <button class="quiet-button" id="login-button" type="button">Already claimed? Sign in</button>
             </div>
             <div id="signed-in-log" class="signed-in-log" hidden>
@@ -89,8 +120,8 @@
               <div class="personal-total"><span>YOUR OCTOBER TOTAL</span><strong id="personal-total">0 <small>steps</small></strong></div>
               <form id="step-form" class="step-form">
                 <label for="step-date">Day</label>
-                <input id="step-date" name="date" type="date" min="2026-10-01" max="2026-10-31" required />
                 <label for="step-count">Steps you took</label>
+                <input id="step-date" name="date" type="date" min="2026-10-01" max="2026-10-31" required />
                 <div class="step-input-wrap"><input id="step-count" name="steps" type="number" min="0" max="100000" step="1" inputmode="numeric" placeholder="e.g. 8,250" required /><span>steps</span></div>
                 <button class="button button-lime button-full" id="save-steps" type="submit">Save my steps <span aria-hidden="true">↗</span></button>
                 <p class="form-feedback" id="step-feedback" role="status"></p>
@@ -101,42 +132,72 @@
         </div>
       </section>
 
+      <section class="grove" data-scene="center" aria-label="Steps logged by everyone so far">
+        <div class="grove-scene" aria-hidden="true">
+          <div class="grove-glow"></div>
+          <img class="grove-layer" data-parallax="-.05" data-parallax-x="-.03" data-drift="6" src="/assets/grove-1.svg" alt="" loading="lazy" />
+          <img class="grove-canopy" data-parallax="-.03" data-parallax-x="-.05" data-drift="10" src="/assets/canopy-far.svg" alt="" loading="lazy" />
+          <img class="grove-layer" data-parallax="-.1" data-parallax-x="-.08" data-drift="14" src="/assets/grove-2.svg" alt="" loading="lazy" />
+          <div class="grove-rays"></div>
+        </div>
+        <div class="grove-copy" data-parallax="-.14">
+          <p class="eyebrow">TOGETHER SO FAR</p>
+          <strong id="grove-total">—</strong>
+          <span>steps through October <em>and counting</em></span>
+        </div>
+        <div class="grove-scene grove-front" aria-hidden="true">
+          <img class="grove-layer" data-parallax="-.2" data-parallax-x="-.18" data-drift="26" src="/assets/grove-3.svg" alt="" loading="lazy" />
+          <img class="grove-canopy" data-parallax="-.06" data-parallax-x="-.2" data-drift="32" src="/assets/canopy-near.svg" alt="" loading="lazy" />
+          <img class="grove-layer" data-parallax="-.3" data-parallax-x="-.34" data-drift="44" src="/assets/grove-4.svg" alt="" loading="lazy" />
+          <img class="grove-ground" data-parallax-x="-.3" data-drift="40" src="/assets/grove-ground.svg" alt="" loading="lazy" />
+          <div class="grove-fade"></div>
+        </div>
+      </section>
+
       <section class="leaders-section page-shell" id="people" aria-labelledby="people-title">
-        <div class="section-heading leaders-heading">
-          <div><p class="eyebrow">INDIVIDUAL SHOUT-OUTS</p><h2 id="people-title">The walkers leading the way<span class="heading-period">.</span></h2></div>
+        <div class="ghost-word ghost-right" data-parallax="-.12" aria-hidden="true">WALKERS</div>
+        <div class="section-heading leaders-heading reveal">
+          <div><p class="eyebrow">INDIVIDUAL SHOUT-OUTS</p><h2 id="people-title">The walkers <em>leading the way</em><span class="heading-period">.</span></h2></div>
           <span class="live-pill"><i></i> LIVE LEADERBOARD</span>
         </div>
         <div class="leaders-layout">
-          <section class="leader-feature card" aria-labelledby="leader-feature-title">
+          <section class="leader-feature card reveal" aria-labelledby="leader-feature-title">
             <div class="leader-feature-top"><span class="card-index">TOP WALKERS</span><span class="leader-star" aria-hidden="true">✳</span></div>
-            <h3 id="leader-feature-title">Every step<br />has a story.</h3>
+            <h3 id="leader-feature-title">Every step<br /><em>has a story.</em></h3>
             <p id="leader-message">First steps set the pace. Be the first to make your mark on this month’s board.</p>
             <div class="mini-leader-list" id="mini-leader-list"><span class="mini-empty">The leaderboard is ready for its first steps.</span></div>
             <div class="leader-feature-footer"><span class="caption-line"></span>ALL 47 WALKERS, ONE WALKTOBER</div>
           </section>
-          <section class="card individual-card" aria-labelledby="individual-title">
+          <section class="card individual-card reveal" aria-labelledby="individual-title">
             <div class="card-topline"><div><span class="card-index">03</span><h3 id="individual-title">Individual leaderboard</h3></div><span class="card-caption">OCTOBER TOTAL</span></div>
-            <label class="leader-search"><span class="sr-only">Search walkers</span><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="8.8" cy="8.8" r="5.8" stroke="currentColor" stroke-width="1.5"/><path d="m13.2 13.2 4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><input id="walker-search" type="search" placeholder="Find a walker…" autocomplete="off" /></label>
+            <label class="leader-search"><span class="sr-only">Search walkers</span><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="8.8" cy="8.8" r="5.8" stroke="currentColor" stroke-width="1.5"/><path d="m13.2 13.2 4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><input id="walker-search" type="search" placeholder="Find a walker or team…" autocomplete="off" /></label>
             <div class="table-wrap"><table><thead><tr><th scope="col">RANK</th><th scope="col">WALKER</th><th scope="col">TEAM</th><th scope="col">STEPS</th></tr></thead><tbody id="leaderboard-body"><tr><td colspan="4" class="loading-line">Loading walker standings…</td></tr></tbody></table></div>
             <div class="table-footer"><span id="walker-count">47 walkers on the roster</span><span>Refreshes every 30 sec <i class="refresh-dot"></i></span></div>
           </section>
         </div>
       </section>
 
-      <section class="how-section page-shell" id="how-it-works">
-        <div class="how-card">
-          <div class="how-copy"><p class="eyebrow">THREE EASY STEPS</p><h2>Walk a little.<br /><span>Win a lot.</span></h2><p>Walktober is a friendly month-long challenge. No special tracker or app needed—just bring your step count and a little team spirit.</p><button class="button button-lime" id="how-log-button" type="button">I’m ready to walk <span aria-hidden="true">↗</span></button></div>
-          <div class="how-steps">
-            <div class="how-step"><span>01</span><div><strong>Claim your name</strong><p>Pick your roster name and set a private passphrase.</p></div><span class="how-check">✓</span></div>
-            <div class="how-step"><span>02</span><div><strong>Walk your way</strong><p>Use your phone, watch, or favorite step counter.</p></div><span class="how-check">✓</span></div>
-            <div class="how-step"><span>03</span><div><strong>Log it daily</strong><p>Add or update your steps and see the leaderboard move.</p></div><span class="how-check">✓</span></div>
-          </div>
-          <div class="how-decoration" aria-hidden="true">WALK<br />TOGETHER<span>↗</span></div>
+      <div class="night" data-scene="bottom">
+        <div class="night-scene" aria-hidden="true">
+          <img class="night-stars" data-parallax=".2" data-drift="4" src="/assets/stars.svg" alt="" loading="lazy" />
+          <div class="moon-wrap" data-parallax="-.3" data-drift="8"><div class="moon-halo"></div><div class="moon"></div></div>
+          <img class="layer ridge" data-parallax=".26" data-drift="8" src="/assets/night-1.svg" alt="" loading="lazy" />
+          <img class="layer ridge" data-parallax=".14" data-drift="18" src="/assets/night-2.svg" alt="" loading="lazy" />
+          <img class="layer ridge layer-front" data-parallax="0" data-drift="34" src="/assets/night-3.svg" alt="" loading="lazy" />
         </div>
-      </section>
+
+        <section class="how-section page-shell" id="how-it-works">
+          <div class="how-copy reveal"><p class="eyebrow">THREE EASY STEPS</p><h2>Walk a little.<br /><em>Win a lot.</em></h2><p>Walktober is a friendly month-long challenge. No special tracker or app needed—just bring your step count and a little team spirit.</p><button class="button button-lime button-large" id="how-log-button" type="button">I’m ready to walk <span aria-hidden="true">↗</span></button></div>
+          <div class="how-steps">
+            <div class="how-step card reveal" style="--i:0"><span class="how-number">01</span><div><strong>Claim your name</strong><p>Pick your roster name and set a private passphrase.</p></div><span class="how-check">✓</span></div>
+            <div class="how-step card reveal" style="--i:1"><span class="how-number">02</span><div><strong>Walk your way</strong><p>Use your phone, watch, or favorite step counter.</p></div><span class="how-check">✓</span></div>
+            <div class="how-step card reveal" style="--i:2"><span class="how-number">03</span><div><strong>Log it daily</strong><p>Add or update your steps and see the leaderboard move.</p></div><span class="how-check">✓</span></div>
+          </div>
+        </section>
+      </div>
     </main>
 
-    <footer class="site-footer page-shell"><a class="footer-brand" href="#top">walktober<span> / </span>mursix</a><span>ONE MONTH. FOUR TEAMS. A LOT OF GOOD STEPS.</span><a href="#top">Back to top ↑</a></footer>
+    <footer class="site-footer"><div class="footer-inner page-shell"><a class="footer-brand" href="#top">walktober<span> / </span>mursix</a><span>ONE MONTH. FOUR TEAMS. A LOT OF GOOD STEPS.</span><a href="#top">Back to top ↑</a></div></footer>
 
     <dialog class="auth-dialog" id="auth-dialog" aria-labelledby="auth-title">
       <button class="dialog-close" id="dialog-close" type="button" aria-label="Close">×</button>

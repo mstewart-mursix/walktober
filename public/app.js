@@ -12,6 +12,7 @@ const state = {
   filter: "",
   challengeToday: "2026-10-01",
   boardError: false,
+  boardSignature: "",
 };
 
 const els = {
@@ -41,6 +42,29 @@ function escapeHtml(value) {
   return String(value).replace(/[&<>"']/gu, (character) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
   })[character]);
+}
+
+function teamClass(team) {
+  return `team-${TEAM_ORDER.indexOf(team) + 1}`;
+}
+
+// Counts a figure up (or down) to its new value instead of swapping it instantly.
+function animateNumber(element, value) {
+  const from = element.dataset.value === undefined ? 0 : Number(element.dataset.value);
+  element.dataset.value = String(value);
+  cancelAnimationFrame(element.countFrame);
+  if (from === value || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    element.textContent = formatSteps(value);
+    return;
+  }
+  const started = performance.now();
+  const tick = (now) => {
+    const progress = Math.min(1, (now - started) / 1400);
+    const eased = 1 - (1 - progress) ** 4;
+    element.textContent = formatSteps(Math.round(from + (value - from) * eased));
+    if (progress < 1) element.countFrame = requestAnimationFrame(tick);
+  };
+  element.countFrame = requestAnimationFrame(tick);
 }
 
 function initials(name) {
@@ -78,6 +102,7 @@ async function loadBoard() {
     els.tbody.innerHTML = `<tr><td colspan="4" class="loading-line">The leaderboard is waiting for its database connection.</td></tr>`;
     if (!state.boardError) showToast("The tracker is getting set up. Try refreshing in a moment.");
     state.boardError = true;
+    state.boardSignature = "";
   }
 }
 
@@ -112,7 +137,8 @@ function renderBoard() {
   const isTeamLead = maxTeam > 0;
   const topTeams = teams.filter((team) => Number(team.total_steps) === maxTeam);
 
-  $("#total-steps").textContent = formatSteps(totalSteps);
+  animateNumber($("#total-steps"), totalSteps);
+  animateNumber($("#grove-total"), totalSteps);
   $("#active-walkers").textContent = `${activeWalkers} / ${state.people.length}`;
   $("#leader-team").textContent = isTeamLead
     ? (topTeams.length === 1 ? topTeams[0].team : `${topTeams.length} teams tied`)
@@ -123,14 +149,20 @@ function renderBoard() {
   $("#challenge-day").textContent = challengeDay === 31 && (now.getMonth() > 9 || now.getFullYear() > 2026) ? "WALKTOBER COMPLETE" : `DAY ${challengeDay} / 31`;
   $("#day-progress").style.width = `${Math.round((challengeDay / 31) * 100)}%`;
 
+  // The board refreshes every 30 seconds; rebuild the lists only when something changed.
+  const signature = JSON.stringify([state.people, state.teams, state.participant?.id]);
+  if (signature === state.boardSignature) return;
+  state.boardSignature = signature;
+
+  renderClimb(teams, maxTeam);
   $("#team-list").innerHTML = competitionRanks(teams, (team) => team.total_steps).map((team) => {
     const members = state.people.filter((person) => person.team === team.team).length;
     const total = Number(team.total_steps || 0);
     const lead = isTeamLead && total === maxTeam;
     const barWidth = maxTeam > 0 ? Math.max(2, (total / maxTeam) * 100) : 0;
-    return `<article class="team-row${lead ? " is-first" : ""}">
+    return `<article class="team-row ${teamClass(team.team)}${lead ? " is-first" : ""}">
       <div class="team-row-top"><span class="team-rank">${String(team.rank).padStart(2, "0")}</span>
-      <span class="team-name-wrap"><strong class="team-name">${escapeHtml(team.team)}</strong><span class="team-small">${members} walkers</span></span>
+      <span class="team-name-wrap"><strong class="team-name">${escapeHtml(team.team)}</strong><span class="team-small">${members} walkers</span>${lead ? '<span class="team-lead">In the lead</span>' : ""}</span>
       <strong class="team-total">${formatSteps(total)} <small>steps</small></strong></div>
       <div class="team-bar" aria-label="${escapeHtml(team.team)} has ${formatSteps(total)} steps"><i style="width:${barWidth}%"></i></div>
     </article>`;
@@ -146,7 +178,7 @@ function renderBoard() {
   $("#leader-message").textContent = leadMessage;
   $("#mini-leader-list").innerHTML = maxPerson > 0
     ? competitionRanks(state.people, (person) => person.total_steps).slice(0, 3).map((person) => {
-      return `<div class="mini-leader"><span class="mini-rank">${person.rank}</span><span class="mini-name">${escapeHtml(person.name)}</span><span class="mini-total">${formatSteps(person.total_steps)}</span></div>`;
+      return `<div class="mini-leader ${teamClass(person.team)}"><span class="mini-rank">${person.rank}</span><span class="mini-name">${escapeHtml(person.name)}<small>${escapeHtml(person.team)}</small></span><span class="mini-total">${formatSteps(person.total_steps)}</span></div>`;
     }).join("")
     : `<span class="mini-empty">The leaderboard is ready for its first steps.</span>`;
 
@@ -162,17 +194,39 @@ function renderPeopleTable() {
     els.tbody.innerHTML = `<tr><td colspan="4" class="loading-line">No walkers match “${escapeHtml(state.filter)}”.</td></tr>`;
     return;
   }
-  const allZero = Number(state.people[0]?.total_steps || 0) === 0;
+  const best = Number(state.people[0]?.total_steps || 0);
+  const allZero = best === 0;
   els.tbody.innerHTML = filtered.map((person) => {
+    const share = allZero ? 0 : Number(person.total_steps || 0) / best;
     const top = !allZero && person.rank <= 3;
     const yours = state.participant?.id === person.id;
-    return `<tr${yours ? ' class="you-row"' : ""}>
-      <td class="rank-cell${top ? " is-top" : ""}">${String(person.rank).padStart(2, "0")}</td>
+    return `<tr class="${teamClass(person.team)}${yours ? " you-row" : ""}">
+      <td class="rank-cell${top ? ` is-top rank-${person.rank}` : ""}"><span>${String(person.rank).padStart(2, "0")}</span></td>
       <td><span class="walker-cell"><span class="walker-avatar">${escapeHtml(initials(person.name))}</span><span class="walker-name">${escapeHtml(person.name)}${yours ? " <small>(you)</small>" : ""}</span></span></td>
       <td><span class="team-tag">${escapeHtml(person.team)}</span></td>
-      <td class="steps-cell">${formatSteps(person.total_steps)}</td>
+      <td class="steps-cell"><span class="steps-bar" style="--share:${share.toFixed(3)}"></span>${formatSteps(person.total_steps)}</td>
     </tr>`;
   }).join("");
+}
+
+// Places each team along the ridge trail by its share of the leading team's steps.
+// Crowded labels alternate above and below the trail so they stay readable.
+function renderClimb(teams, maxTeam) {
+  const trail = $("#climb-trail");
+  const length = trail.getTotalLength();
+  const labelGap = (86 / Math.max(1, trail.ownerSVGElement.clientWidth)) * 1000;
+  const markers = teams.map((team) => {
+    const share = maxTeam > 0 ? Number(team.total_steps || 0) / maxTeam : 0;
+    const point = trail.getPointAtLength(length * (0.02 + share * 0.96));
+    return { team: team.team, share, x: point.x, y: point.y, level: 0 };
+  }).sort((left, right) => left.x - right.x);
+  markers.forEach((marker, index) => {
+    const previous = markers[index - 1];
+    if (previous && marker.x - previous.x < labelGap) marker.level = previous.level + 1;
+  });
+  $("#climb-markers").innerHTML = markers.map((marker, index) => `<div class="climb-marker ${teamClass(marker.team)}${marker.x < 130 ? " is-start" : ""}${marker.x > 870 ? " is-end" : ""}${marker.level % 2 ? " is-below" : ""}" style="left:${(marker.x / 10).toFixed(2)}%;top:${(marker.y / 3).toFixed(2)}%;--tier:${Math.floor(marker.level / 2)};--i:${index}">
+      <span class="climb-pin"></span><span class="climb-label">${escapeHtml(marker.team)}<small>${Math.round(marker.share * 100)}%</small></span>
+    </div>`).join("");
 }
 
 function competitionRanks(items, getScore) {
@@ -227,7 +281,7 @@ function renderMySteps() {
   });
   const stepMax = state.challengeToday < "2026-10-01" ? "2026-10-01" : (state.challengeToday > "2026-10-31" ? "2026-10-31" : state.challengeToday);
   els.stepDate.max = stepMax;
-  if (!els.stepDate.value) els.stepDate.value = monthToday ? localDateString(today) : "2026-10-01";
+  if (!els.stepDate.value) els.stepDate.value = stepMax;
   renderAccount();
 }
 
