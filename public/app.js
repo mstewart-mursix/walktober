@@ -1,4 +1,4 @@
-const TEAM_ORDER = ["1:00 PM", "1:15 PM", "1:30 PM", "1:45 PM"];
+const TEAM_ORDER = ["Team 1", "Team 2", "Team 3", "Team 4"];
 const $ = (selector) => document.querySelector(selector);
 const numberFormat = new Intl.NumberFormat("en-US");
 
@@ -206,7 +206,7 @@ function renderAccount() {
   els.accountButton.innerHTML = isSignedIn ? "Your account <span aria-hidden=\"true\">↗</span>" : "Sign in <span aria-hidden=\"true\">↗</span>";
   if (!isSignedIn) return;
   $("#account-name").textContent = state.participant.name;
-  $("#account-team").textContent = `Team ${state.participant.team}`;
+  $("#account-team").textContent = state.participant.team;
   $("#account-initial").textContent = initials(state.participant.name).slice(0, 1);
   const personalTotal = state.mySteps.reduce((total, entry) => total + Number(entry.steps), 0);
   $("#personal-total").innerHTML = `${formatSteps(personalTotal)} <small>steps</small>`;

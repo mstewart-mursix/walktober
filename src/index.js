@@ -25,7 +25,7 @@ async function route(request, env, url) {
   }
   if (request.method === "GET" && pathname === "/api/me") {
     const participant = await currentParticipant(request, env);
-    return json({ participant });
+    return json({ participant: participant ? publicParticipant(participant) : null });
   }
   if (request.method === "GET" && pathname === "/api/steps") {
     const participant = await requireParticipant(request, env);
@@ -76,14 +76,14 @@ async function leaderboard(env) {
   ]);
   return json({
     challenge: { start: CHALLENGE_START, end: CHALLENGE_END, today: challengeToday() },
-    people: peopleResult.results,
-    teams: teamsResult.results,
+    people: peopleResult.results.map((person) => ({ ...person, team: publicTeamName(person.team) })),
+    teams: teamsResult.results.map((team) => ({ ...team, team: publicTeamName(team.team) })),
     updatedAt: new Date().toISOString(),
   });
 }
 
 async function claim(request, env) {
-  if (!env.CLAIM_CODE || env.CLAIM_CODE.length < 12 || !env.SESSION_SECRET || env.SESSION_SECRET.length < 32) {
+  if (!env.CLAIM_CODE || env.CLAIM_CODE.length < 10 || !env.SESSION_SECRET || env.SESSION_SECRET.length < 32) {
     return json({ error: "Name claiming is not set up yet. Ask the challenge organizer for help." }, 503);
   }
   const body = await readJson(request);
@@ -216,7 +216,17 @@ async function setSessionResponse(request, env, participant) {
 }
 
 function publicParticipant(participant) {
-  return { id: participant.id, name: participant.name, team: participant.team };
+  return { id: participant.id, name: participant.name, team: publicTeamName(participant.team) };
+}
+
+function publicTeamName(team) {
+  const labels = {
+    "1:00 PM": "Team 1",
+    "1:15 PM": "Team 2",
+    "1:30 PM": "Team 3",
+    "1:45 PM": "Team 4",
+  };
+  return labels[team] || team;
 }
 
 function sessionCookie(request, token) {
