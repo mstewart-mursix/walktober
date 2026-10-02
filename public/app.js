@@ -353,6 +353,7 @@ els.stepForm.addEventListener("submit", async (event) => {
   setFeedback(els.stepFeedback, "");
   try {
     await api("/api/steps", { method: "PUT", body: JSON.stringify({ date, steps }) });
+    els.stepCount.value = "";
     await Promise.all([loadMySteps(), loadBoard()]);
     setFeedback(els.stepFeedback, "Your steps are on the board. Nice work!");
     showToast("Steps saved. Your team total just moved.");
