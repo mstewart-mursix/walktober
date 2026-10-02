@@ -1,0 +1,2 @@
+CLAIM_CODE="replace-with-a-private-code-to-share-with-participants"
+SESSION_SECRET="replace-with-at-least-32-random-characters"
