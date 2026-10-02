@@ -14,7 +14,7 @@
     {
       "binding": "DB",
       "database_name": "walktober",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "e1bc2fbf-cc3a-4678-b9a5-b83731ddcb8e",
       "migrations_dir": "migrations"
     }
   ]
