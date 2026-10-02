@@ -343,6 +343,11 @@ tbody tr:last-child td { border-bottom: 0; }
 .auth-form [hidden] { display: none; }
 .auth-hint { margin: 2px 0 6px; color: var(--muted); font-size: 12px; line-height: 1.6; }
 .auth-form .button { margin-top: 4px; }
+.step-reminder-dialog { width: min(520px, calc(100% - 32px)); max-width: none; padding: clamp(28px, 6vw, 40px); border: 1px solid var(--line-strong); border-radius: 28px; color: var(--ink); background: linear-gradient(180deg, #17352c, #0e231d); box-shadow: 0 1px 0 rgba(255, 255, 255, .1) inset, 0 50px 120px rgba(0, 0, 0, .7); }
+.step-reminder-dialog[open] { animation: dialog-in .45s var(--ease); }
+.step-reminder-dialog::backdrop { background: rgba(4, 12, 10, .7); backdrop-filter: blur(8px); }
+.step-reminder-dialog h2 { margin: 12px 42px 18px 0; font: 600 clamp(32px, 7vw, 42px)/1.05 var(--display); letter-spacing: -.03em; }
+.step-reminder-message { margin: 0 0 24px; padding: 18px; border: 1px solid var(--line-strong); border-radius: 16px; color: var(--ink-soft); background: rgba(5, 14, 12, .5); font-size: 16px; line-height: 1.7; }
 .toast { position: fixed; z-index: 40; right: 24px; bottom: 24px; max-width: min(380px, calc(100vw - 32px)); padding: 14px 18px; border: 1px solid rgba(216, 241, 123, .45); border-radius: 16px; color: var(--ink); background: rgba(14, 35, 29, .92); box-shadow: 0 20px 50px rgba(0, 0, 0, .55); backdrop-filter: blur(14px); opacity: 0; pointer-events: none; transform: translateY(14px); transition: opacity .3s ease, transform .4s var(--ease); font-size: 14px; }
 .toast.is-visible { opacity: 1; transform: translateY(0); }
 

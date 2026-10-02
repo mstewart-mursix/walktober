@@ -18,6 +18,7 @@ const state = {
 const els = {
   accountButton: $("#account-button"),
   authDialog: $("#auth-dialog"),
+  stepReminderDialog: $("#step-reminder-dialog"),
   authForm: $("#auth-form"),
   authName: $("#auth-name"),
   authCode: $("#auth-code"),
@@ -350,6 +351,11 @@ $("#how-log-button").addEventListener("click", () => openAuth("claim"));
 $("#claim-button").addEventListener("click", () => openAuth("claim"));
 $("#login-button").addEventListener("click", () => openAuth("login"));
 els.accountButton.addEventListener("click", () => openAuth(state.participant ? "login" : "login"));
+$("#step-reminder-close").addEventListener("click", () => els.stepReminderDialog.close());
+$("#step-reminder-confirm").addEventListener("click", () => els.stepReminderDialog.close());
+els.stepReminderDialog.addEventListener("click", (event) => {
+  if (event.target === els.stepReminderDialog) els.stepReminderDialog.close();
+});
 $("#dialog-close").addEventListener("click", () => els.authDialog.close());
 $("#claim-tab").addEventListener("click", () => setAuthMode("claim"));
 $("#signin-tab").addEventListener("click", () => setAuthMode("login"));
@@ -410,7 +416,7 @@ els.stepForm.addEventListener("submit", async (event) => {
     els.stepCount.value = "";
     await Promise.all([loadMySteps(), loadBoard()]);
     setFeedback(els.stepFeedback, "Your steps are on the board. Nice work!");
-    showToast("Steps saved. Your team total just moved.");
+    els.stepReminderDialog.showModal();
   } catch (error) {
     setFeedback(els.stepFeedback, error.message, true);
   } finally {
