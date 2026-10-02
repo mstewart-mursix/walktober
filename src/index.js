@@ -30,10 +30,35 @@ async function route(request, env, url) {
   if (request.method === "GET" && pathname === "/api/steps") {
     const participant = await requireParticipant(request, env);
     if (participant instanceof Response) return participant;
-    const rows = await env.DB.prepare(
-      "SELECT step_date AS date, steps FROM daily_steps WHERE participant_id = ? ORDER BY step_date DESC",
-    ).bind(participant.id).all();
-    return json({ steps: rows.results });
+    const [stepsResult, readingsResult] = await Promise.all([
+      env.DB.prepare(
+        "SELECT step_date AS date, steps FROM daily_steps WHERE participant_id = ? ORDER BY step_date DESC",
+      ).bind(participant.id).all(),
+      env.DB.prepare(
+        "SELECT step_date AS date, cycle_start AS cycleStart, reading FROM stepometer_readings WHERE participant_id = ? ORDER BY step_date DESC, cycle_start DESC",
+      ).bind(participant.id).all(),
+    ]);
+    const readingsByDate = new Map();
+    for (const entry of readingsResult.results) {
+      if (!readingsByDate.has(entry.date)) readingsByDate.set(entry.date, []);
+      readingsByDate.get(entry.date).push({ cycleStart: entry.cycleStart, reading: entry.reading });
+    }
+    return json({ steps: stepsResult.results.map((entry) => ({
+      ...entry,
+      readings: readingsByDate.get(entry.date) || [],
+    })) });
+  }
+  if (request.method === "PUT" && pathname === "/api/privacy") {
+    if (!sameOrigin(request)) return json({ error: "Request could not be verified." }, 403);
+    const participant = await requireParticipant(request, env);
+    if (participant instanceof Response) return participant;
+    const body = await readJson(request);
+    if (!body || typeof body.hideIndividual !== "boolean") {
+      return json({ error: "Choose whether to hide your individual total." }, 400);
+    }
+    await env.DB.prepare("UPDATE participants SET hide_individual = ? WHERE id = ?")
+      .bind(body.hideIndividual ? 1 : 0, participant.id).run();
+    return json({ participant: publicParticipant({ ...participant, hide_individual: body.hideIndividual ? 1 : 0 }) });
   }
   if (request.method === "POST" && pathname === "/api/claim") {
     if (!sameOrigin(request)) return json({ error: "Request could not be verified." }, 403);
@@ -59,25 +84,29 @@ async function route(request, env, url) {
 }
 
 async function leaderboard(env) {
-  const [peopleResult, teamsResult] = await Promise.all([
+  const [peopleResult, teamsResult, rosterResult] = await Promise.all([
     env.DB.prepare(
       `SELECT p.id, p.name, p.team, COALESCE(SUM(s.steps), 0) AS total_steps,
         COUNT(s.step_date) AS days_logged
        FROM participants p LEFT JOIN daily_steps s ON s.participant_id = p.id
+       WHERE p.hide_individual = 0
        GROUP BY p.id ORDER BY total_steps DESC, p.name COLLATE NOCASE ASC`,
     ).all(),
     env.DB.prepare(
       `SELECT p.team, COALESCE(SUM(s.steps), 0) AS total_steps,
-        COUNT(DISTINCT CASE WHEN s.step_date IS NOT NULL THEN p.id END) AS walkers_logged,
+        COUNT(DISTINCT CASE WHEN s.steps > 0 THEN p.id END) AS walkers_logged,
+        COUNT(DISTINCT p.id) AS participant_count,
         COUNT(s.step_date) AS days_logged
        FROM participants p LEFT JOIN daily_steps s ON s.participant_id = p.id
        GROUP BY p.team ORDER BY p.team ASC`,
     ).all(),
+    env.DB.prepare("SELECT id, name, team FROM participants ORDER BY team, name COLLATE NOCASE").all(),
   ]);
   return json({
     challenge: { start: CHALLENGE_START, end: CHALLENGE_END, today: challengeToday() },
     people: peopleResult.results.map((person) => ({ ...person, team: publicTeamName(person.team) })),
     teams: teamsResult.results.map((team) => ({ ...team, team: publicTeamName(team.team) })),
+    roster: rosterResult.results.map((person) => ({ ...person, team: publicTeamName(person.team) })),
     updatedAt: new Date().toISOString(),
   });
 }
@@ -98,7 +127,7 @@ async function claim(request, env) {
     return json({ error: "That organizer code didn’t match. Check with the challenge organizer." }, 403);
   }
   const participant = await env.DB.prepare(
-    "SELECT id, name, team FROM participants WHERE name = ? COLLATE NOCASE",
+    "SELECT id, name, team, hide_individual FROM participants WHERE name = ? COLLATE NOCASE",
   ).bind(name).first();
   if (!participant) return json({ error: "Choose a name from the Walktober roster." }, 404);
   const existing = await env.DB.prepare(
@@ -125,7 +154,7 @@ async function login(request, env) {
   const name = typeof body.name === "string" ? body.name.trim() : "";
   const password = typeof body.password === "string" ? body.password : "";
   const record = await env.DB.prepare(
-    `SELECT p.id, p.name, p.team, c.salt, c.password_hash
+    `SELECT p.id, p.name, p.team, p.hide_individual, c.salt, c.password_hash
      FROM participants p JOIN credentials c ON c.participant_id = p.id
      WHERE p.name = ? COLLATE NOCASE`,
   ).bind(name).first();
@@ -172,25 +201,159 @@ async function throttledAuth(request, env, action, handler) {
 
 async function saveSteps(request, env, participant) {
   const body = await readJson(request);
-  if (!body) return json({ error: "Enter a date and step count." }, 400);
+  if (!body) return json({ error: "Enter a date and stepometer reading." }, 400);
   const date = typeof body.date === "string" ? body.date : "";
-  const steps = Number(body.steps);
+  const reading = Number(body.reading);
+  const afterReset = body.afterReset === true;
   if (!/^2026-10-(0[1-9]|[12][0-9]|3[01])$/.test(date)) {
     return json({ error: "Choose a date in October 2026." }, 400);
   }
-  if (!Number.isSafeInteger(steps) || steps < 0 || steps > 100000) {
-    return json({ error: "Enter a whole number from 0 to 100,000." }, 400);
+  if (!Number.isSafeInteger(reading) || reading < 0 || reading > 100000) {
+    return json({ error: "Enter a whole-number stepometer reading from 0 to 100,000." }, 400);
+  }
+  if (afterReset && !isMondayDate(date)) {
+    return json({ error: "The reset option is only available for Monday readings." }, 400);
   }
   if (date > challengeToday()) {
     return json({ error: "You can add steps through today, but not for a future date." }, 400);
   }
-  await env.DB.prepare(
-    `INSERT INTO daily_steps (participant_id, step_date, steps, updated_at)
-     VALUES (?, ?, ?, datetime('now'))
-     ON CONFLICT(participant_id, step_date)
-     DO UPDATE SET steps = excluded.steps, updated_at = datetime('now')`,
-  ).bind(participant.id, date, steps).run();
-  return json({ ok: true, date, steps });
+  const plan = await buildStepReadingPlan(env, participant.id, date, reading, afterReset);
+  if (plan.error) return json({ error: plan.error }, 400);
+  if (!matchesStepConfirmation(body.confirmation, plan.confirmation)) {
+    return json({
+      confirmationRequired: true,
+      error: "Review the calculated steps, then confirm to save this reading.",
+      preview: plan.confirmation,
+    }, 409);
+  }
+
+  const statements = [
+    env.DB.prepare(
+      `INSERT INTO stepometer_readings (participant_id, step_date, cycle_start, reading, updated_at)
+       VALUES (?, ?, ?, ?, datetime('now'))
+       ON CONFLICT(participant_id, step_date, cycle_start) DO UPDATE SET
+         reading = excluded.reading,
+         updated_at = datetime('now')`,
+    ).bind(participant.id, date, plan.confirmation.cycleStart, reading),
+    ...plan.contributions.map(({ date: stepDate, steps }) => env.DB.prepare(
+      `INSERT INTO daily_steps (participant_id, step_date, steps, updated_at)
+       VALUES (?, ?, ?, datetime('now'))
+       ON CONFLICT(participant_id, step_date)
+       DO UPDATE SET steps = excluded.steps, updated_at = datetime('now')`,
+    ).bind(participant.id, stepDate, steps)),
+  ];
+  await env.DB.batch(statements);
+  return json({
+    ok: true,
+    date,
+    reading,
+    steps: plan.confirmation.stepsToAdd,
+    totalAdjustment: plan.confirmation.totalAdjustment,
+  });
+}
+
+async function buildStepReadingPlan(env, participantId, date, reading, afterReset) {
+  const [readingResult, stepResult, legacyResult] = await Promise.all([
+    env.DB.prepare(
+      "SELECT step_date AS date, cycle_start AS cycleStart, reading FROM stepometer_readings WHERE participant_id = ? ORDER BY step_date",
+    ).bind(participantId).all(),
+    env.DB.prepare(
+      "SELECT step_date AS date, steps FROM daily_steps WHERE participant_id = ? ORDER BY step_date",
+    ).bind(participantId).all(),
+    env.DB.prepare(
+      "SELECT step_date AS date, steps FROM legacy_step_entries WHERE participant_id = ? ORDER BY step_date",
+    ).bind(participantId).all(),
+  ]);
+
+  const cycleStart = cycleStartForDate(date, afterReset);
+  const readings = readingResult.results
+    .filter((entry) => !(entry.date === date && entry.cycleStart === cycleStart))
+    .concat({ date, cycleStart, reading })
+    .sort((left, right) => left.date.localeCompare(right.date) || left.cycleStart.localeCompare(right.cycleStart));
+  const legacySteps = legacyResult.results;
+  const existingSteps = stepResult.results;
+  const oldTotal = existingSteps.reduce((total, entry) => total + Number(entry.steps), 0);
+  const byCycle = new Map();
+  for (const entry of readings) {
+    if (!byCycle.has(entry.cycleStart)) byCycle.set(entry.cycleStart, []);
+    byCycle.get(entry.cycleStart).push(entry);
+  }
+
+  const contributions = [];
+  let submittedReadingDetails = null;
+  for (const [cycleStart, cycleReadings] of byCycle) {
+    const cycleLegacy = legacySteps.filter((entry) => legacyCycleStart(entry.date) === cycleStart);
+    let previousReading = null;
+    let previousDate = null;
+    for (const entry of cycleReadings) {
+      const legacyOffset = cycleLegacy
+        .filter((legacy) => legacy.date <= entry.date && (!previousDate || legacy.date > previousDate))
+        .reduce((total, legacy) => total + Number(legacy.steps), 0);
+      const stepsToAdd = Number(entry.reading) - (previousReading ?? 0) - legacyOffset;
+      if (stepsToAdd < 0) {
+        return {
+          error: "This reading is lower than the earlier reading for this reset cycle. Check the number or mark a Monday reading as taken after the 10:00 a.m. reset.",
+        };
+      }
+      contributions.push({ date: entry.date, steps: stepsToAdd });
+      if (entry.date === date && entry.cycleStart === cycleStart) {
+        submittedReadingDetails = { previousReading, legacyOffset, stepsToAdd };
+      }
+      previousReading = Number(entry.reading);
+      previousDate = entry.date;
+    }
+  }
+
+  if (!submittedReadingDetails) {
+    return { error: "We couldn’t calculate this reading. Please try again." };
+  }
+  const newTotal = legacySteps.reduce((total, entry) => total + Number(entry.steps), 0)
+    + contributions.reduce((total, entry) => total + entry.steps, 0);
+  const dailyContributions = new Map();
+  for (const entry of legacySteps) {
+    dailyContributions.set(entry.date, Number(entry.steps));
+  }
+  for (const entry of contributions) {
+    dailyContributions.set(entry.date, (dailyContributions.get(entry.date) || 0) + entry.steps);
+  }
+  const confirmation = {
+    date,
+    reading,
+    afterReset,
+    cycleStart,
+    previousReading: submittedReadingDetails.previousReading,
+    legacyOffset: submittedReadingDetails.legacyOffset,
+    stepsToAdd: submittedReadingDetails.stepsToAdd,
+    totalAdjustment: newTotal - oldTotal,
+    recalculatesLater: readings.some((entry) => entry.cycleStart === cycleStart && entry.date > date),
+  };
+  return { confirmation, contributions: [...dailyContributions].map(([stepDate, steps]) => ({ date: stepDate, steps })) };
+}
+
+function matchesStepConfirmation(supplied, expected) {
+  if (!supplied || typeof supplied !== "object") return false;
+  return ["date", "reading", "afterReset", "cycleStart", "previousReading", "legacyOffset", "stepsToAdd", "totalAdjustment", "recalculatesLater"]
+    .every((key) => supplied[key] === expected[key]);
+}
+
+function legacyCycleStart(date) {
+  return cycleStartForDate(date, false);
+}
+
+function cycleStartForDate(date, afterReset) {
+  const [year, month, day] = date.split("-").map(Number);
+  const selected = new Date(Date.UTC(year, month - 1, day));
+  const weekday = selected.getUTCDay();
+  let daysSinceMonday = (weekday + 6) % 7;
+  if (weekday === 1 && !afterReset) daysSinceMonday = 7;
+  selected.setUTCDate(selected.getUTCDate() - daysSinceMonday);
+  const monday = `${selected.getUTCFullYear()}-${String(selected.getUTCMonth() + 1).padStart(2, "0")}-${String(selected.getUTCDate()).padStart(2, "0")}`;
+  return monday < CHALLENGE_START ? CHALLENGE_START : monday;
+}
+
+function isMondayDate(date) {
+  const [year, month, day] = date.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day)).getUTCDay() === 1;
 }
 
 async function requireParticipant(request, env) {
@@ -203,7 +366,7 @@ async function currentParticipant(request, env) {
   if (!token || !env.SESSION_SECRET) return null;
   const payload = await verifySession(token, env.SESSION_SECRET);
   if (!payload || payload.exp < Math.floor(Date.now() / 1000)) return null;
-  return env.DB.prepare("SELECT id, name, team FROM participants WHERE id = ?")
+  return env.DB.prepare("SELECT id, name, team, hide_individual FROM participants WHERE id = ?")
     .bind(payload.pid).first();
 }
 
@@ -216,7 +379,12 @@ async function setSessionResponse(request, env, participant) {
 }
 
 function publicParticipant(participant) {
-  return { id: participant.id, name: participant.name, team: publicTeamName(participant.team) };
+  return {
+    id: participant.id,
+    name: participant.name,
+    team: publicTeamName(participant.team),
+    hideIndividual: Boolean(participant.hide_individual),
+  };
 }
 
 function publicTeamName(team) {

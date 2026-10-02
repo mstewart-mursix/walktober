@@ -207,6 +207,13 @@ h2 em, .leader-feature h3 em { font-weight: 400; color: var(--lime); }
 .personal-total > span { color: var(--muted); font: 500 10px/1.3 var(--mono); letter-spacing: 1.2px; }
 .personal-total strong { color: var(--lime); font: 560 30px/1 var(--display); font-variant-numeric: tabular-nums; letter-spacing: -.7px; }
 .personal-total small { color: var(--muted); font: 400 12px var(--sans); letter-spacing: 0; }
+.privacy-toggle { display: flex; align-items: flex-start; gap: 11px; padding: 14px; border: 1px solid var(--line-strong); border-radius: 14px; background: rgba(5, 14, 12, .28); cursor: pointer; }
+.privacy-toggle input { flex: 0 0 auto; width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--lime); }
+.privacy-toggle span { display: grid; gap: 3px; }
+.privacy-toggle strong { color: var(--ink); font-size: 13px; }
+.privacy-toggle small { color: var(--muted); font-size: 11px; line-height: 1.5; }
+.privacy-feedback { min-height: 17px; margin: 4px 0 8px; color: var(--lime); font-size: 11px; }
+.privacy-feedback.is-error { color: #ff9f85; }
 .step-form { display: grid; grid-template-columns: 1fr 1fr; gap: 7px 12px; text-align: left; }
 .step-form label { color: var(--ink-soft); font-size: 12px; font-weight: 600; }
 .step-form input, .auth-form input, .auth-form select, .leader-search input { width: 100%; height: 46px; padding: 0 14px; border: 1px solid var(--line-strong); border-radius: 12px; color: var(--ink); background: rgba(5, 14, 12, .5); font-size: 14px; transition: border-color .2s ease, box-shadow .2s ease; }
@@ -215,16 +222,24 @@ h2 em, .leader-feature h3 em { font-weight: 400; color: var(--lime); }
 .step-form .step-input-wrap { position: relative; }
 .step-input-wrap input { padding-right: 52px; }
 .step-input-wrap span { position: absolute; top: 50%; right: 14px; color: var(--muted); font-size: 12px; transform: translateY(-50%); }
+.stepometer-help { grid-column: 1 / -1; margin: 2px 0 4px; color: var(--muted); font-size: 11px; line-height: 1.55; }
+.reset-check { display: flex; grid-column: 1 / -1; align-items: flex-start; gap: 9px; padding: 11px 12px; border: 1px solid var(--line-strong); border-radius: 11px; color: var(--ink-soft) !important; background: rgba(5, 14, 12, .35); font-size: 11px !important; line-height: 1.45; cursor: pointer; }
+.reset-check[hidden] { display: none; }
+.step-form input[type="checkbox"] { flex: 0 0 auto; width: 17px; height: 17px; margin: 0; padding: 0; accent-color: var(--lime); }
 .step-form .button { grid-column: 1 / -1; margin-top: 8px; }
 .form-feedback { min-height: 20px; grid-column: 1 / -1; margin: 0; color: var(--lime); font-size: 13px; text-align: center; }
 .form-feedback.is-error { color: #ff9f85; }
 .recent-entry { margin-top: 4px; border-top: 1px solid var(--line); }
 .recent-entry-heading { display: flex; justify-content: space-between; padding: 14px 0 10px; color: var(--muted); font: 500 10px/1.3 var(--mono); letter-spacing: 1.1px; }
 .recent-entry-heading span:last-child { font: 400 12px/1.3 var(--sans); letter-spacing: 0; }
-.recent-steps { display: flex; flex-wrap: wrap; gap: 7px; }
-.recent-day { padding: 7px 11px; border: 1px solid var(--line-strong); border-radius: 99px; color: var(--ink-soft); background: rgba(255, 255, 255, .04); cursor: pointer; font-size: 12px; transition: border-color .2s ease, color .2s ease; }
-.recent-day:hover { color: var(--ink); border-color: var(--lime); }
-.recent-day strong { margin-left: 5px; color: var(--lime); font-weight: 700; }
+.recent-steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 8px; }
+.recent-day-group { display: grid; gap: 6px; padding: 9px; border: 1px solid var(--line-strong); border-radius: 13px; background: rgba(255, 255, 255, .035); }
+.recent-day-summary { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; color: var(--ink-soft); font-size: 12px; }
+.recent-day-summary strong { color: var(--lime); font-size: 12px; font-weight: 700; }
+.recent-readings { display: flex; flex-wrap: wrap; gap: 5px; }
+.recent-reading { display: grid; gap: 2px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 9px; color: var(--ink-soft); background: rgba(5, 14, 12, .4); cursor: pointer; font-size: 10px; text-align: left; transition: border-color .2s ease, color .2s ease; }
+.recent-reading:hover { color: var(--ink); border-color: var(--lime); }
+.recent-reading small, .recent-legacy { color: var(--muted); font-size: 9px; }
 .recent-empty { color: var(--muted); font-size: 13px; }
 
 /* Aspen grove: a framed window where scrolling walks the camera past the trunks */
@@ -343,6 +358,17 @@ tbody tr:last-child td { border-bottom: 0; }
 .auth-form [hidden] { display: none; }
 .auth-hint { margin: 2px 0 6px; color: var(--muted); font-size: 12px; line-height: 1.6; }
 .auth-form .button { margin-top: 4px; }
+.reading-confirmation-dialog { width: min(490px, calc(100% - 32px)); }
+.reading-confirmation-dialog h2 { margin-top: 10px; }
+.reading-confirmation-totals { display: grid; grid-template-columns: 1fr auto; gap: 10px 16px; margin-top: 18px; padding: 16px; border: 1px solid var(--line-strong); border-radius: 16px; background: rgba(5, 14, 12, .5); }
+.reading-confirmation-totals span { color: var(--muted); font-size: 13px; }
+.reading-confirmation-totals strong { color: var(--ink); font-variant-numeric: tabular-nums; text-align: right; }
+.reading-confirmation-totals strong:last-child { color: var(--lime); }
+.reading-confirmation-note { margin: 14px 0 0; color: var(--ink-soft); font-size: 12px; line-height: 1.55; }
+.reading-confirmation-note[hidden] { display: none; }
+.reading-confirmation-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 22px; }
+.reading-confirmation-actions .quiet-button { margin: 0; }
+.reading-confirmation-actions .button { min-height: 44px; padding-inline: 16px; font-size: 13px; }
 .step-reminder-dialog { width: min(520px, calc(100% - 32px)); max-width: none; padding: clamp(28px, 6vw, 40px); border: 1px solid var(--line-strong); border-radius: 28px; color: var(--ink); background: linear-gradient(180deg, #17352c, #0e231d); box-shadow: 0 1px 0 rgba(255, 255, 255, .1) inset, 0 50px 120px rgba(0, 0, 0, .7); }
 .step-reminder-dialog[open] { animation: dialog-in .45s var(--ease); }
 .step-reminder-dialog::backdrop { background: rgba(4, 12, 10, .7); backdrop-filter: blur(8px); }

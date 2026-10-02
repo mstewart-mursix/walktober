@@ -5,8 +5,10 @@ const numberFormat = new Intl.NumberFormat("en-US");
 const state = {
   people: [],
   teams: [],
+  roster: [],
   participant: null,
   mySteps: [],
+  pendingReading: null,
   authMode: "claim",
   toastTimer: null,
   filter: "",
@@ -18,6 +20,7 @@ const state = {
 const els = {
   accountButton: $("#account-button"),
   authDialog: $("#auth-dialog"),
+  readingConfirmationDialog: $("#reading-confirmation-dialog"),
   stepReminderDialog: $("#step-reminder-dialog"),
   authForm: $("#auth-form"),
   authName: $("#auth-name"),
@@ -31,6 +34,10 @@ const els = {
   stepDate: $("#step-date"),
   stepCount: $("#step-count"),
   stepFeedback: $("#step-feedback"),
+  resetCheck: $("#reset-check"),
+  stepAfterReset: $("#step-after-reset"),
+  hideIndividual: $("#hide-individual"),
+  privacyFeedback: $("#privacy-feedback"),
   search: $("#walker-search"),
   tbody: $("#leaderboard-body"),
 };
@@ -83,7 +90,7 @@ async function api(path, options = {}) {
   });
   let data;
   try { data = await response.json(); } catch { data = {}; }
-  if (!response.ok) throw new Error(data.error || "That didn’t work. Please try again.");
+  if (!response.ok && !data.confirmationRequired) throw new Error(data.error || "That didn’t work. Please try again.");
   return data;
 }
 
@@ -92,6 +99,7 @@ async function loadBoard() {
     const data = await api("/api/leaderboard");
     state.people = data.people || [];
     state.teams = data.teams || [];
+    state.roster = data.roster || [];
     state.challengeToday = data.challenge?.today || state.challengeToday;
     state.boardError = false;
     renderBoard();
@@ -131,16 +139,16 @@ async function loadMySteps() {
 }
 
 function renderBoard() {
-  const totalSteps = state.people.reduce((total, person) => total + Number(person.total_steps || 0), 0);
-  const activeWalkers = state.people.filter((person) => Number(person.total_steps) > 0).length;
   const teams = [...state.teams].sort((left, right) => TEAM_ORDER.indexOf(left.team) - TEAM_ORDER.indexOf(right.team));
+  const totalSteps = teams.reduce((total, team) => total + Number(team.total_steps || 0), 0);
+  const activeWalkers = teams.reduce((total, team) => total + Number(team.walkers_logged || 0), 0);
   const maxTeam = Math.max(0, ...teams.map((team) => Number(team.total_steps)));
   const isTeamLead = maxTeam > 0;
   const topTeams = teams.filter((team) => Number(team.total_steps) === maxTeam);
 
   animateNumber($("#total-steps"), totalSteps);
   animateNumber($("#grove-total"), totalSteps);
-  $("#active-walkers").textContent = `${activeWalkers} / ${state.people.length}`;
+  $("#active-walkers").textContent = `${activeWalkers} / ${state.roster.length}`;
   $("#leader-team").textContent = isTeamLead
     ? (topTeams.length === 1 ? topTeams[0].team : `${topTeams.length} teams tied`)
     : "—";
@@ -151,13 +159,13 @@ function renderBoard() {
   $("#day-progress").style.width = `${Math.round((challengeDay / 31) * 100)}%`;
 
   // The board refreshes every 30 seconds; rebuild the lists only when something changed.
-  const signature = JSON.stringify([state.people, state.teams, state.participant?.id]);
+  const signature = JSON.stringify([state.people, state.teams, state.roster, state.participant?.id, state.participant?.hideIndividual]);
   if (signature === state.boardSignature) return;
   state.boardSignature = signature;
 
   renderClimb(teams, maxTeam);
   $("#team-list").innerHTML = competitionRanks(teams, (team) => team.total_steps).map((team) => {
-    const members = state.people.filter((person) => person.team === team.team).length;
+    const members = Number(team.participant_count || 0);
     const total = Number(team.total_steps || 0);
     const lead = isTeamLead && total === maxTeam;
     const barWidth = maxTeam > 0 ? Math.max(2, (total / maxTeam) * 100) : 0;
@@ -183,7 +191,7 @@ function renderBoard() {
     }).join("")
     : `<span class="mini-empty">The leaderboard is ready for its first steps.</span>`;
 
-  $("#walker-count").textContent = `${state.people.length} walkers on the roster`;
+  $("#walker-count").textContent = `${state.people.length} sharing individual totals · ${state.roster.length} on the roster`;
   renderPeopleTable();
   if (state.participant) renderAccount();
 }
@@ -192,7 +200,10 @@ function renderPeopleTable() {
   const search = state.filter.trim().toLowerCase();
   const filtered = competitionRanks(state.people, (person) => person.total_steps).filter((person) => !search || person.name.toLowerCase().includes(search) || person.team.toLowerCase().includes(search));
   if (!filtered.length) {
-    els.tbody.innerHTML = `<tr><td colspan="4" class="loading-line">No walkers match “${escapeHtml(state.filter)}”.</td></tr>`;
+    const message = state.filter.trim()
+      ? `No walkers match “${escapeHtml(state.filter)}”.`
+      : "No walkers are sharing individual totals yet.";
+    els.tbody.innerHTML = `<tr><td colspan="4" class="loading-line">${message}</td></tr>`;
     return;
   }
   const best = Number(state.people[0]?.total_steps || 0);
@@ -244,11 +255,11 @@ function competitionRanks(items, getScore) {
 function populateRosterSelect() {
   const selected = els.authName.value;
   const options = TEAM_ORDER.map((team) => {
-    const people = state.people.filter((person) => person.team === team).sort((a, b) => a.name.localeCompare(b.name));
+    const people = state.roster.filter((person) => person.team === team).sort((a, b) => a.name.localeCompare(b.name));
     return `<optgroup label="${escapeHtml(team)}">${people.map((person) => `<option value="${escapeHtml(person.name)}">${escapeHtml(person.name)}</option>`).join("")}</optgroup>`;
   }).join("");
   els.authName.innerHTML = `<option value="">Choose your name</option>${options}`;
-  if (selected && state.people.some((person) => person.name === selected)) els.authName.value = selected;
+  if (selected && state.roster.some((person) => person.name === selected)) els.authName.value = selected;
   if (state.participant) els.authName.value = state.participant.name;
 }
 
@@ -263,6 +274,7 @@ function renderAccount() {
   $("#account-name").textContent = state.participant.name;
   $("#account-team").textContent = state.participant.team;
   $("#account-initial").textContent = initials(state.participant.name).slice(0, 1);
+  els.hideIndividual.checked = Boolean(state.participant.hideIndividual);
   const personalTotal = state.mySteps.reduce((total, entry) => total + Number(entry.steps), 0);
   $("#personal-total").innerHTML = `${formatSteps(personalTotal)} <small>steps</small>`;
   populateRosterSelect();
@@ -271,18 +283,30 @@ function renderAccount() {
 function renderMySteps() {
   const recent = [...state.mySteps].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
   $("#recent-steps").innerHTML = recent.length
-    ? recent.map((entry) => `<button class="recent-day" type="button" data-date="${escapeHtml(entry.date)}" data-steps="${Number(entry.steps)}">${escapeHtml(formatShortDate(entry.date))}<strong>${formatSteps(entry.steps)}</strong></button>`).join("")
+    ? recent.map((entry) => {
+      const readings = entry.readings || [];
+      const readingButtons = readings.map((item) => {
+        const afterReset = item.cycleStart === entry.date;
+        const label = isMondayDate(entry.date) ? (afterReset ? "after reset" : "before reset") : "stepometer";
+        return `<button class="recent-reading" type="button" data-date="${escapeHtml(entry.date)}" data-reading="${Number(item.reading)}" data-after-reset="${afterReset}">Meter ${formatSteps(item.reading)}<small>${label} · edit</small></button>`;
+      }).join("");
+      const history = readingButtons || `<span class="recent-legacy">Existing total</span>`;
+      return `<div class="recent-day-group"><div class="recent-day-summary"><span>${escapeHtml(formatShortDate(entry.date))}</span><strong>+${formatSteps(entry.steps)}</strong></div><div class="recent-readings">${history}</div></div>`;
+    }).join("")
     : `<span class="recent-empty">Your entries will show up here.</span>`;
   $("#recent-steps").querySelectorAll("[data-date]").forEach((button) => {
     button.addEventListener("click", () => {
       els.stepDate.value = button.dataset.date;
-      els.stepCount.value = button.dataset.steps;
+      els.stepAfterReset.checked = button.dataset.afterReset === "true";
+      updateResetOption(true);
+      els.stepCount.value = button.dataset.reading;
       els.stepCount.focus();
     });
   });
   const stepMax = state.challengeToday < "2026-10-01" ? "2026-10-01" : (state.challengeToday > "2026-10-31" ? "2026-10-31" : state.challengeToday);
   els.stepDate.max = stepMax;
   if (!els.stepDate.value) els.stepDate.value = stepMax;
+  updateResetOption(true);
   renderAccount();
 }
 
@@ -293,6 +317,16 @@ function formatShortDate(date) {
 
 function localDateString(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function isMondayDate(date) {
+  return Boolean(date) && new Date(`${date}T12:00:00`).getDay() === 1;
+}
+
+function updateResetOption(preserveSelection = false) {
+  const isMonday = isMondayDate(els.stepDate.value);
+  els.resetCheck.hidden = !isMonday;
+  if (!isMonday || !preserveSelection) els.stepAfterReset.checked = false;
 }
 
 function updateTimestamp() {
@@ -333,7 +367,7 @@ function openAuth(mode = "claim") {
     return;
   }
   setAuthMode(mode);
-  if (state.people.length) populateRosterSelect();
+  if (state.roster.length) populateRosterSelect();
   els.authDialog.showModal();
   setTimeout(() => els.authName.focus(), 50);
 }
@@ -356,6 +390,17 @@ $("#step-reminder-confirm").addEventListener("click", () => els.stepReminderDial
 els.stepReminderDialog.addEventListener("click", (event) => {
   if (event.target === els.stepReminderDialog) els.stepReminderDialog.close();
 });
+$("#reading-confirmation-close").addEventListener("click", () => els.readingConfirmationDialog.close());
+$("#reading-confirmation-edit").addEventListener("click", () => els.readingConfirmationDialog.close());
+$("#reading-confirmation-save").addEventListener("click", () => {
+  if (state.pendingReading) saveStepReading(state.pendingReading);
+});
+els.readingConfirmationDialog.addEventListener("click", (event) => {
+  if (event.target === els.readingConfirmationDialog) els.readingConfirmationDialog.close();
+});
+els.readingConfirmationDialog.addEventListener("close", () => {
+  state.pendingReading = null;
+});
 $("#dialog-close").addEventListener("click", () => els.authDialog.close());
 $("#claim-tab").addEventListener("click", () => setAuthMode("claim"));
 $("#signin-tab").addEventListener("click", () => setAuthMode("login"));
@@ -365,6 +410,29 @@ els.authDialog.addEventListener("click", (event) => {
 els.authDialog.addEventListener("close", () => {
   els.authForm.reset();
   setFeedback(els.authFeedback, "");
+});
+
+els.stepDate.addEventListener("change", () => updateResetOption());
+els.hideIndividual.addEventListener("change", async () => {
+  if (!state.participant) return;
+  els.hideIndividual.disabled = true;
+  setFeedback(els.privacyFeedback, "Saving your privacy setting…");
+  try {
+    const data = await api("/api/privacy", {
+      method: "PUT",
+      body: JSON.stringify({ hideIndividual: els.hideIndividual.checked }),
+    });
+    state.participant = data.participant;
+    setFeedback(els.privacyFeedback, state.participant.hideIndividual
+      ? "Your individual total is hidden. Your team total is unchanged."
+      : "Your individual total is visible on the leaderboard.");
+    await loadBoard();
+  } catch (error) {
+    els.hideIndividual.checked = Boolean(state.participant.hideIndividual);
+    setFeedback(els.privacyFeedback, error.message, true);
+  } finally {
+    els.hideIndividual.disabled = false;
+  }
 });
 
 els.authForm.addEventListener("submit", async (event) => {
@@ -399,30 +467,91 @@ els.authForm.addEventListener("submit", async (event) => {
   }
 });
 
+function formatSignedSteps(value) {
+  const steps = Number(value) || 0;
+  if (steps > 0) return `+${formatSteps(steps)}`;
+  if (steps < 0) return `−${formatSteps(Math.abs(steps))}`;
+  return "0";
+}
+
+function showReadingConfirmation(preview) {
+  const previous = preview.previousReading;
+  if (previous !== null) {
+    $("#reading-confirmation-message").textContent = `Your previous stepometer reading was ${formatSteps(previous)}. This reading is ${formatSteps(preview.reading)}, so ${formatSteps(preview.stepsToAdd)} new steps will be added.`;
+  } else if (preview.legacyOffset > 0) {
+    $("#reading-confirmation-message").textContent = `There isn’t a previous stepometer reading in this reset cycle. ${formatSteps(preview.legacyOffset)} steps are already logged for this period, so this reading adds ${formatSteps(preview.stepsToAdd)} new steps.`;
+  } else {
+    $("#reading-confirmation-message").textContent = `This is the first reading in this reset cycle, so ${formatSteps(preview.stepsToAdd)} steps will be added.`;
+  }
+  if (preview.afterReset) {
+    $("#reading-confirmation-message").textContent += " It starts a fresh cycle after Monday’s 10:00 a.m. reset.";
+  }
+  $("#confirmation-reading").textContent = `${formatSteps(preview.reading)} steps`;
+  $("#confirmation-addition").textContent = `${formatSteps(preview.stepsToAdd)} steps`;
+
+  const notes = [];
+  if (preview.totalAdjustment !== preview.stepsToAdd) {
+    notes.push(`Because this updates an earlier entry, the overall challenge total will change by ${formatSignedSteps(preview.totalAdjustment)}.`);
+  }
+  if (preview.recalculatesLater) notes.push("Later readings in this reset cycle will be recalculated too.");
+  const note = $("#reading-confirmation-note");
+  note.textContent = notes.join(" ");
+  note.hidden = notes.length === 0;
+  if (!els.readingConfirmationDialog.open) els.readingConfirmationDialog.showModal();
+}
+
+async function saveStepReading(entry) {
+  const saveButton = $("#save-steps");
+  const confirmButton = $("#reading-confirmation-save");
+  saveButton.disabled = true;
+  confirmButton.disabled = true;
+  saveButton.textContent = entry.confirmation ? "Saving your reading…" : "Checking your reading…";
+  confirmButton.textContent = "Saving…";
+  setFeedback(els.stepFeedback, "");
+  try {
+    const body = {
+      date: entry.date,
+      reading: entry.reading,
+      afterReset: entry.afterReset,
+      ...(entry.confirmation ? { confirmation: entry.confirmation } : {}),
+    };
+    const result = await api("/api/steps", { method: "PUT", body: JSON.stringify(body) });
+    if (result.confirmationRequired) {
+      state.pendingReading = { ...entry, confirmation: result.preview };
+      showReadingConfirmation(result.preview);
+      return;
+    }
+
+    state.pendingReading = null;
+    if (els.readingConfirmationDialog.open) els.readingConfirmationDialog.close();
+    els.stepCount.value = "";
+    await Promise.all([loadMySteps(), loadBoard()]);
+    setFeedback(els.stepFeedback, `${formatSteps(result.steps)} new steps added to your total.`);
+    els.stepReminderDialog.showModal();
+  } catch (error) {
+    if (els.readingConfirmationDialog.open) els.readingConfirmationDialog.close();
+    setFeedback(els.stepFeedback, error.message, true);
+  } finally {
+    saveButton.disabled = false;
+    saveButton.innerHTML = 'Save my steps <span aria-hidden="true">↗</span>';
+    confirmButton.disabled = false;
+    confirmButton.textContent = "Confirm and save";
+  }
+}
+
 els.stepForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!state.participant) return openAuth("login");
-  const date = els.stepDate.value;
-  const steps = Number(els.stepCount.value);
-  if (!Number.isSafeInteger(steps) || steps < 0 || steps > 100000) {
-    return setFeedback(els.stepFeedback, "Enter a whole number from 0 to 100,000.", true);
+  const reading = Number(els.stepCount.value);
+  if (!Number.isSafeInteger(reading) || reading < 0 || reading > 100000) {
+    return setFeedback(els.stepFeedback, "Enter a whole-number reading from 0 to 100,000.", true);
   }
-  const button = $("#save-steps");
-  button.disabled = true;
-  button.textContent = "Saving your steps…";
-  setFeedback(els.stepFeedback, "");
-  try {
-    await api("/api/steps", { method: "PUT", body: JSON.stringify({ date, steps }) });
-    els.stepCount.value = "";
-    await Promise.all([loadMySteps(), loadBoard()]);
-    setFeedback(els.stepFeedback, "Your steps are on the board. Nice work!");
-    els.stepReminderDialog.showModal();
-  } catch (error) {
-    setFeedback(els.stepFeedback, error.message, true);
-  } finally {
-    button.disabled = false;
-    button.innerHTML = 'Save my steps <span aria-hidden="true">↗</span>';
-  }
+  await saveStepReading({
+    date: els.stepDate.value,
+    reading,
+    afterReset: els.stepAfterReset.checked,
+    confirmation: null,
+  });
 });
 
 $("#logout-button").addEventListener("click", async () => {
