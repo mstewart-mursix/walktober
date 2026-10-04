@@ -9,6 +9,8 @@ const state = {
   participant: null,
   mySteps: [],
   pendingReading: null,
+  selectedReadingId: null,
+  selectedReadingDate: null,
   authMode: "claim",
   toastTimer: null,
   filter: "",
@@ -287,8 +289,10 @@ function renderMySteps() {
       const readings = entry.readings || [];
       const readingButtons = readings.map((item) => {
         const afterReset = item.cycleStart === entry.date;
-        const label = isMondayDate(entry.date) ? (afterReset ? "after reset" : "before reset") : "stepometer";
-        return `<button class="recent-reading" type="button" data-date="${escapeHtml(entry.date)}" data-reading="${Number(item.reading)}" data-after-reset="${afterReset}">Meter ${formatSteps(item.reading)}<small>${label} · edit</small></button>`;
+        const label = item.resetAfterMax
+          ? `after 99,999 reset · +${formatSteps(item.stepsAdded)}`
+          : `${isMondayDate(entry.date) ? (afterReset ? "after Monday reset" : "before Monday reset") : "new steps"} · +${formatSteps(item.stepsAdded)}`;
+        return `<button class="recent-reading" type="button" data-id="${Number(item.id)}" data-date="${escapeHtml(entry.date)}" data-reading="${Number(item.reading)}" data-after-reset="${afterReset}">Meter ${formatSteps(item.reading)}<small>${label} · edit</small></button>`;
       }).join("");
       const history = readingButtons || `<span class="recent-legacy">Existing total</span>`;
       return `<div class="recent-day-group"><div class="recent-day-summary"><span>${escapeHtml(formatShortDate(entry.date))}</span><strong>+${formatSteps(entry.steps)}</strong></div><div class="recent-readings">${history}</div></div>`;
@@ -300,6 +304,8 @@ function renderMySteps() {
       els.stepAfterReset.checked = button.dataset.afterReset === "true";
       updateResetOption(true);
       els.stepCount.value = button.dataset.reading;
+      state.selectedReadingId = Number(button.dataset.id);
+      state.selectedReadingDate = button.dataset.date;
       els.stepCount.focus();
     });
   });
@@ -387,6 +393,13 @@ $("#login-button").addEventListener("click", () => openAuth("login"));
 els.accountButton.addEventListener("click", () => openAuth(state.participant ? "login" : "login"));
 $("#step-reminder-close").addEventListener("click", () => els.stepReminderDialog.close());
 $("#step-reminder-confirm").addEventListener("click", () => els.stepReminderDialog.close());
+$("#new-reading-button").addEventListener("click", () => {
+  state.selectedReadingId = null;
+  state.selectedReadingDate = null;
+  els.stepCount.value = "";
+  setFeedback(els.stepFeedback, "Enter a new meter reading. Each reading is kept in your history.");
+  els.stepCount.focus();
+});
 els.stepReminderDialog.addEventListener("click", (event) => {
   if (event.target === els.stepReminderDialog) els.stepReminderDialog.close();
 });
@@ -412,7 +425,13 @@ els.authDialog.addEventListener("close", () => {
   setFeedback(els.authFeedback, "");
 });
 
-els.stepDate.addEventListener("change", () => updateResetOption());
+  els.stepDate.addEventListener("change", () => {
+    if (state.selectedReadingDate !== els.stepDate.value) {
+      state.selectedReadingId = null;
+      state.selectedReadingDate = null;
+    }
+    updateResetOption();
+  });
 els.hideIndividual.addEventListener("change", async () => {
   if (!state.participant) return;
   els.hideIndividual.disabled = true;
@@ -476,7 +495,9 @@ function formatSignedSteps(value) {
 
 function showReadingConfirmation(preview) {
   const previous = preview.previousReading;
-  if (previous !== null) {
+  if (preview.resetAfterMax) {
+    $("#reading-confirmation-message").textContent = `Your previous reading reached 99,999. This reading of ${formatSteps(preview.reading)} is after the meter was reset, so ${formatSteps(preview.stepsToAdd)} additional steps will be added.`;
+  } else if (previous !== null) {
     $("#reading-confirmation-message").textContent = `Your previous stepometer reading was ${formatSteps(previous)}. This reading is ${formatSteps(preview.reading)}, so ${formatSteps(preview.stepsToAdd)} new steps will be added.`;
   } else if (preview.legacyOffset > 0) {
     $("#reading-confirmation-message").textContent = `There isn’t a previous stepometer reading in this reset cycle. ${formatSteps(preview.legacyOffset)} steps are already logged for this period, so this reading adds ${formatSteps(preview.stepsToAdd)} new steps.`;
@@ -513,6 +534,7 @@ async function saveStepReading(entry) {
       date: entry.date,
       reading: entry.reading,
       afterReset: entry.afterReset,
+      readingId: entry.readingId,
       ...(entry.confirmation ? { confirmation: entry.confirmation } : {}),
     };
     const result = await api("/api/steps", { method: "PUT", body: JSON.stringify(body) });
@@ -523,6 +545,8 @@ async function saveStepReading(entry) {
     }
 
     state.pendingReading = null;
+    state.selectedReadingId = null;
+    state.selectedReadingDate = null;
     if (els.readingConfirmationDialog.open) els.readingConfirmationDialog.close();
     els.stepCount.value = "";
     await Promise.all([loadMySteps(), loadBoard()]);
@@ -543,13 +567,14 @@ els.stepForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!state.participant) return openAuth("login");
   const reading = Number(els.stepCount.value);
-  if (!Number.isSafeInteger(reading) || reading < 0 || reading > 100000) {
-    return setFeedback(els.stepFeedback, "Enter a whole-number reading from 0 to 100,000.", true);
+  if (!Number.isSafeInteger(reading) || reading < 0 || reading > 99999) {
+    return setFeedback(els.stepFeedback, "Enter a whole-number reading from 0 to 99,999.", true);
   }
   await saveStepReading({
     date: els.stepDate.value,
     reading,
     afterReset: els.stepAfterReset.checked,
+    readingId: state.selectedReadingId,
     confirmation: null,
   });
 });

@@ -127,13 +127,13 @@
                 <label for="step-date">Reading date</label>
                 <label for="step-count">Stepometer reading</label>
                 <input id="step-date" name="date" type="date" min="2026-10-01" max="2026-10-31" required />
-                <div class="step-input-wrap"><input id="step-count" name="reading" type="number" min="0" max="100000" step="1" inputmode="numeric" placeholder="e.g. 8,250" aria-describedby="stepometer-help" required /><span>steps</span></div>
-                <p class="stepometer-help" id="stepometer-help">Enter the total shown on your counter. We’ll subtract your previous reading so each step only counts once. Counters reset Monday at 10:00 a.m.</p>
+                <div class="step-input-wrap"><input id="step-count" name="reading" type="number" min="0" max="99999" step="1" inputmode="numeric" placeholder="e.g. 8,250" aria-describedby="stepometer-help" required /><span>steps</span></div>
+                <p class="stepometer-help" id="stepometer-help">Enter the total shown on your counter. If it reaches 99,999, save that reading before resetting it; the next lower reading is added on top. Monday’s regular reset is at 10:00 a.m.</p>
                 <label class="reset-check" id="reset-check" for="step-after-reset" hidden><input id="step-after-reset" type="checkbox" /> This reading is after Monday’s 10:00 a.m. reset</label>
                 <button class="button button-lime button-full" id="save-steps" type="submit">Save my steps <span aria-hidden="true">↗</span></button>
                 <p class="form-feedback" id="step-feedback" role="status"></p>
               </form>
-              <div class="recent-entry"><div class="recent-entry-heading"><span>RECENT ENTRIES</span><span>Tap a reading to edit</span></div><div id="recent-steps" class="recent-steps"><span class="recent-empty">Your entries will show up here.</span></div></div>
+              <div class="recent-entry"><div class="recent-entry-heading"><span>RECENT ENTRIES</span><div class="recent-entry-actions"><span>Tap a reading to edit</span><button id="new-reading-button" class="new-reading-button" type="button">Add a reading</button></div></div><div id="recent-steps" class="recent-steps"><span class="recent-empty">Your entries will show up here.</span></div></div>
             </div>
           </section>
         </div>

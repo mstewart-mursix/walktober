@@ -231,7 +231,10 @@ h2 em, .leader-feature h3 em { font-weight: 400; color: var(--lime); }
 .form-feedback.is-error { color: #ff9f85; }
 .recent-entry { margin-top: 4px; border-top: 1px solid var(--line); }
 .recent-entry-heading { display: flex; justify-content: space-between; padding: 14px 0 10px; color: var(--muted); font: 500 10px/1.3 var(--mono); letter-spacing: 1.1px; }
-.recent-entry-heading span:last-child { font: 400 12px/1.3 var(--sans); letter-spacing: 0; }
+.recent-entry-actions { display: flex; align-items: center; gap: 10px; }
+.recent-entry-actions > span { font: 400 12px/1.3 var(--sans); letter-spacing: 0; }
+.new-reading-button { padding: 4px 8px; border: 1px solid var(--line-strong); border-radius: 8px; color: var(--lime); background: rgba(255, 255, 255, .04); cursor: pointer; font: 500 11px/1.3 var(--sans); letter-spacing: 0; }
+.new-reading-button:hover { border-color: var(--lime); }
 .recent-steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 8px; }
 .recent-day-group { display: grid; gap: 6px; padding: 9px; border: 1px solid var(--line-strong); border-radius: 13px; background: rgba(255, 255, 255, .035); }
 .recent-day-summary { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; color: var(--ink-soft); font-size: 12px; }

@@ -3,6 +3,7 @@ const SESSION_SECONDS = 60 * 60 * 24 * 30;
 const CHALLENGE_START = "2026-10-01";
 const CHALLENGE_END = "2026-10-31";
 const CHALLENGE_TIME_ZONE = "America/Indiana/Indianapolis";
+const MAX_METER_READING = 99999;
 
 export default {
   async fetch(request, env) {
@@ -30,18 +31,30 @@ async function route(request, env, url) {
   if (request.method === "GET" && pathname === "/api/steps") {
     const participant = await requireParticipant(request, env);
     if (participant instanceof Response) return participant;
-    const [stepsResult, readingsResult] = await Promise.all([
+    const [stepsResult, readingsResult, legacyResult] = await Promise.all([
       env.DB.prepare(
         "SELECT step_date AS date, steps FROM daily_steps WHERE participant_id = ? ORDER BY step_date DESC",
       ).bind(participant.id).all(),
       env.DB.prepare(
-        "SELECT step_date AS date, cycle_start AS cycleStart, reading FROM stepometer_readings WHERE participant_id = ? ORDER BY step_date DESC, cycle_start DESC",
+        "SELECT id, step_date AS date, cycle_start AS cycleStart, reading FROM stepometer_entries WHERE participant_id = ? ORDER BY step_date, id",
+      ).bind(participant.id).all(),
+      env.DB.prepare(
+        "SELECT step_date AS date, steps FROM legacy_step_entries WHERE participant_id = ? ORDER BY step_date",
       ).bind(participant.id).all(),
     ]);
+    const history = calculateMeterContributions(readingsResult.results, legacyResult.results);
+    const contributionById = new Map((history.contributions || []).map((entry) => [entry.id, entry]));
     const readingsByDate = new Map();
     for (const entry of readingsResult.results) {
       if (!readingsByDate.has(entry.date)) readingsByDate.set(entry.date, []);
-      readingsByDate.get(entry.date).push({ cycleStart: entry.cycleStart, reading: entry.reading });
+      const contribution = contributionById.get(entry.id);
+      readingsByDate.get(entry.date).push({
+        id: entry.id,
+        cycleStart: entry.cycleStart,
+        reading: entry.reading,
+        stepsAdded: contribution?.steps ?? 0,
+        resetAfterMax: contribution?.resetAfterMax ?? false,
+      });
     }
     return json({ steps: stepsResult.results.map((entry) => ({
       ...entry,
@@ -204,12 +217,16 @@ async function saveSteps(request, env, participant) {
   if (!body) return json({ error: "Enter a date and stepometer reading." }, 400);
   const date = typeof body.date === "string" ? body.date : "";
   const reading = Number(body.reading);
+  const readingId = body.readingId === null || body.readingId === undefined ? null : Number(body.readingId);
   const afterReset = body.afterReset === true;
   if (!/^2026-10-(0[1-9]|[12][0-9]|3[01])$/.test(date)) {
     return json({ error: "Choose a date in October 2026." }, 400);
   }
-  if (!Number.isSafeInteger(reading) || reading < 0 || reading > 100000) {
-    return json({ error: "Enter a whole-number stepometer reading from 0 to 100,000." }, 400);
+  if (!Number.isSafeInteger(reading) || reading < 0 || reading > MAX_METER_READING) {
+    return json({ error: "Enter a whole-number stepometer reading from 0 to 99,999." }, 400);
+  }
+  if (readingId !== null && (!Number.isSafeInteger(readingId) || readingId < 1)) {
+    return json({ error: "Choose a reading from your recent entries to edit." }, 400);
   }
   if (afterReset && !isMondayDate(date)) {
     return json({ error: "The reset option is only available for Monday readings." }, 400);
@@ -217,7 +234,7 @@ async function saveSteps(request, env, participant) {
   if (date > challengeToday()) {
     return json({ error: "You can add steps through today, but not for a future date." }, 400);
   }
-  const plan = await buildStepReadingPlan(env, participant.id, date, reading, afterReset);
+  const plan = await buildStepReadingPlan(env, participant.id, date, reading, afterReset, readingId);
   if (plan.error) return json({ error: plan.error }, 400);
   if (!matchesStepConfirmation(body.confirmation, plan.confirmation)) {
     return json({
@@ -227,14 +244,17 @@ async function saveSteps(request, env, participant) {
     }, 409);
   }
 
+  const saveReading = readingId === null
+    ? env.DB.prepare(
+      `INSERT INTO stepometer_entries (participant_id, step_date, cycle_start, reading, updated_at)
+       VALUES (?, ?, ?, ?, datetime('now'))`,
+    ).bind(participant.id, date, plan.confirmation.cycleStart, reading)
+    : env.DB.prepare(
+      `UPDATE stepometer_entries SET step_date = ?, cycle_start = ?, reading = ?, updated_at = datetime('now')
+       WHERE id = ? AND participant_id = ?`,
+    ).bind(date, plan.confirmation.cycleStart, reading, readingId, participant.id);
   const statements = [
-    env.DB.prepare(
-      `INSERT INTO stepometer_readings (participant_id, step_date, cycle_start, reading, updated_at)
-       VALUES (?, ?, ?, ?, datetime('now'))
-       ON CONFLICT(participant_id, step_date, cycle_start) DO UPDATE SET
-         reading = excluded.reading,
-         updated_at = datetime('now')`,
-    ).bind(participant.id, date, plan.confirmation.cycleStart, reading),
+    saveReading,
     ...plan.contributions.map(({ date: stepDate, steps }) => env.DB.prepare(
       `INSERT INTO daily_steps (participant_id, step_date, steps, updated_at)
        VALUES (?, ?, ?, datetime('now'))
@@ -247,15 +267,16 @@ async function saveSteps(request, env, participant) {
     ok: true,
     date,
     reading,
+    readingId,
     steps: plan.confirmation.stepsToAdd,
     totalAdjustment: plan.confirmation.totalAdjustment,
   });
 }
 
-async function buildStepReadingPlan(env, participantId, date, reading, afterReset) {
+async function buildStepReadingPlan(env, participantId, date, reading, afterReset, readingId) {
   const [readingResult, stepResult, legacyResult] = await Promise.all([
     env.DB.prepare(
-      "SELECT step_date AS date, cycle_start AS cycleStart, reading FROM stepometer_readings WHERE participant_id = ? ORDER BY step_date",
+      "SELECT id, step_date AS date, cycle_start AS cycleStart, reading FROM stepometer_entries WHERE participant_id = ? ORDER BY step_date, id",
     ).bind(participantId).all(),
     env.DB.prepare(
       "SELECT step_date AS date, steps FROM daily_steps WHERE participant_id = ? ORDER BY step_date",
@@ -266,57 +287,40 @@ async function buildStepReadingPlan(env, participantId, date, reading, afterRese
   ]);
 
   const cycleStart = cycleStartForDate(date, afterReset);
+  const existingReading = readingId === null
+    ? null
+    : readingResult.results.find((entry) => Number(entry.id) === readingId);
+  if (readingId !== null && !existingReading) {
+    return { error: "That reading could not be found. Refresh your recent entries and try again." };
+  }
+  const candidateId = readingId ?? Number.MAX_SAFE_INTEGER;
   const readings = readingResult.results
-    .filter((entry) => !(entry.date === date && entry.cycleStart === cycleStart))
-    .concat({ date, cycleStart, reading })
-    .sort((left, right) => left.date.localeCompare(right.date) || left.cycleStart.localeCompare(right.cycleStart));
+    .filter((entry) => Number(entry.id) !== readingId)
+    .concat({ id: candidateId, date, cycleStart, reading })
+    .sort((left, right) => left.date.localeCompare(right.date) || Number(left.id) - Number(right.id));
   const legacySteps = legacyResult.results;
   const existingSteps = stepResult.results;
   const oldTotal = existingSteps.reduce((total, entry) => total + Number(entry.steps), 0);
-  const byCycle = new Map();
-  for (const entry of readings) {
-    if (!byCycle.has(entry.cycleStart)) byCycle.set(entry.cycleStart, []);
-    byCycle.get(entry.cycleStart).push(entry);
-  }
-
-  const contributions = [];
-  let submittedReadingDetails = null;
-  for (const [cycleStart, cycleReadings] of byCycle) {
-    const cycleLegacy = legacySteps.filter((entry) => legacyCycleStart(entry.date) === cycleStart);
-    let previousReading = null;
-    let previousDate = null;
-    for (const entry of cycleReadings) {
-      const legacyOffset = cycleLegacy
-        .filter((legacy) => legacy.date <= entry.date && (!previousDate || legacy.date > previousDate))
-        .reduce((total, legacy) => total + Number(legacy.steps), 0);
-      const stepsToAdd = Number(entry.reading) - (previousReading ?? 0) - legacyOffset;
-      if (stepsToAdd < 0) {
-        return {
-          error: "This reading is lower than the earlier reading for this reset cycle. Check the number or mark a Monday reading as taken after the 10:00 a.m. reset.",
-        };
-      }
-      contributions.push({ date: entry.date, steps: stepsToAdd });
-      if (entry.date === date && entry.cycleStart === cycleStart) {
-        submittedReadingDetails = { previousReading, legacyOffset, stepsToAdd };
-      }
-      previousReading = Number(entry.reading);
-      previousDate = entry.date;
-    }
-  }
-
+  const history = calculateMeterContributions(readings, legacySteps);
+  if (history.error) return { error: history.error };
+  const submittedReadingDetails = history.contributions.find((entry) => Number(entry.id) === candidateId);
   if (!submittedReadingDetails) {
     return { error: "We couldn’t calculate this reading. Please try again." };
   }
   const newTotal = legacySteps.reduce((total, entry) => total + Number(entry.steps), 0)
-    + contributions.reduce((total, entry) => total + entry.steps, 0);
+    + history.contributions.reduce((total, entry) => total + entry.steps, 0);
   const dailyContributions = new Map();
   for (const entry of legacySteps) {
     dailyContributions.set(entry.date, Number(entry.steps));
   }
-  for (const entry of contributions) {
+  for (const entry of history.contributions) {
     dailyContributions.set(entry.date, (dailyContributions.get(entry.date) || 0) + entry.steps);
   }
+  if ([...dailyContributions.values()].some((steps) => steps > 1000000)) {
+    return { error: "This date’s total is over the tracker’s daily limit. Please check the readings before saving." };
+  }
   const confirmation = {
+    readingId,
     date,
     reading,
     afterReset,
@@ -324,15 +328,70 @@ async function buildStepReadingPlan(env, participantId, date, reading, afterRese
     previousReading: submittedReadingDetails.previousReading,
     legacyOffset: submittedReadingDetails.legacyOffset,
     stepsToAdd: submittedReadingDetails.stepsToAdd,
+    resetAfterMax: submittedReadingDetails.resetAfterMax,
     totalAdjustment: newTotal - oldTotal,
-    recalculatesLater: readings.some((entry) => entry.cycleStart === cycleStart && entry.date > date),
+    recalculatesLater: readings.some((entry) => entry.cycleStart === cycleStart
+      && (entry.date > date || (entry.date === date && Number(entry.id) > candidateId))),
   };
-  return { confirmation, contributions: [...dailyContributions].map(([stepDate, steps]) => ({ date: stepDate, steps })) };
+  return {
+    confirmation,
+    contributions: [...dailyContributions].map(([stepDate, steps]) => ({ date: stepDate, steps })),
+  };
+}
+
+function calculateMeterContributions(readings, legacySteps) {
+  const byCycle = new Map();
+  for (const entry of readings) {
+    if (!byCycle.has(entry.cycleStart)) byCycle.set(entry.cycleStart, []);
+    byCycle.get(entry.cycleStart).push(entry);
+  }
+  const contributions = [];
+  for (const [cycleStart, cycleReadings] of byCycle) {
+    const cycleLegacy = legacySteps.filter((entry) => legacyCycleStart(entry.date) === cycleStart);
+    let previousReading = null;
+    let previousDate = null;
+    for (const entry of cycleReadings) {
+      const currentReading = Number(entry.reading);
+      const resetAfterMax = previousReading !== null
+        && currentReading < previousReading
+        && previousReading >= MAX_METER_READING;
+      if (previousReading !== null && currentReading < previousReading && !resetAfterMax) {
+        return {
+          error: "This reading is lower than the last one. Save the meter at 99,999 before resetting it, or check that you chose the right Monday reset option.",
+        };
+      }
+      const legacyOffset = cycleLegacy
+        .filter((legacy) => legacy.date <= entry.date && (!previousDate || legacy.date > previousDate))
+        .reduce((total, legacy) => total + Number(legacy.steps), 0);
+      const meterSteps = previousReading === null || resetAfterMax
+        ? currentReading
+        : currentReading - previousReading;
+      const stepsToAdd = meterSteps - legacyOffset;
+      if (stepsToAdd < 0) {
+        return {
+          error: "This reading is lower than steps already logged in this reset cycle. Check the number or the date you selected.",
+        };
+      }
+      contributions.push({
+        id: entry.id,
+        date: entry.date,
+        cycleStart,
+        reading: currentReading,
+        previousReading,
+        legacyOffset,
+        steps: stepsToAdd,
+        resetAfterMax,
+      });
+      previousReading = currentReading;
+      previousDate = entry.date;
+    }
+  }
+  return { contributions };
 }
 
 function matchesStepConfirmation(supplied, expected) {
   if (!supplied || typeof supplied !== "object") return false;
-  return ["date", "reading", "afterReset", "cycleStart", "previousReading", "legacyOffset", "stepsToAdd", "totalAdjustment", "recalculatesLater"]
+  return ["readingId", "date", "reading", "afterReset", "cycleStart", "previousReading", "legacyOffset", "stepsToAdd", "resetAfterMax", "totalAdjustment", "recalculatesLater"]
     .every((key) => supplied[key] === expected[key]);
 }
 
